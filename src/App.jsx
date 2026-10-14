@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./index.css";
+import { db } from "./firebase";
+import { collection, onSnapshot, doc, updateDoc, setDoc } from "firebase/firestore";
 
-// ১. প্রতিটি প্যান্ডেলের সঠিক ল্যাটিটিউড (lat) ও লংটিউড (lng) সহ ডেটাসেট
-const pandals = [
+// ১. প্রাথমিক ডিফোল্ট প্যান্ডেল ডেটাসেট
+const initialPandals = [
   {
-    id: 1,
+    id: "1",
     name: "Sreebhumi Sporting Club",
     area: "Lake Town",
     lat: 22.5958,
@@ -14,7 +16,7 @@ const pandals = [
     image: "/images/sreebhumi.jpg"
   },
   {
-    id: 2,
+    id: "2",
     name: "Ekdalia Evergreen Club",
     area: "Gariahat",
     lat: 22.5181,
@@ -24,7 +26,7 @@ const pandals = [
     image: "/images/ekdalia.jpg"
   },
   {
-    id: 3,
+    id: "3",
     name: "Tridhara Sammilani",
     area: "Ballygunge",
     lat: 22.5246,
@@ -34,7 +36,7 @@ const pandals = [
     image: "/images/tridhara.jpg"
   },
   {
-    id: 4,
+    id: "4",
     name: "College Square",
     area: "College Street",
     lat: 22.5731,
@@ -44,7 +46,7 @@ const pandals = [
     image: "/images/college-square.jpg"
   },
   {
-    id: 5,
+    id: "5",
     name: "Bagbazar Sarbojanin",
     area: "Bagbazar",
     lat: 22.6017,
@@ -54,7 +56,7 @@ const pandals = [
     image: "/images/bagbazar.jpg"
   },
   {
-    id: 6,
+    id: "6",
     name: "Mohammad Ali Park",
     area: "Central Kolkata",
     lat: 22.5761,
@@ -65,9 +67,9 @@ const pandals = [
   }
 ];
 
-// ২. দুটি জিপিএস পয়েন্টের মধ্যে দূরত্ব কিলোমিটার (KM)-এ বের করার ফর্মুলা (Haversine Formula)
+// ২. দূরত্ব বের করার ফর্মুলা (Haversine Formula)
 function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Radius of the earth in km
+  const R = 6371;
   const dLat = deg2rad(lat2 - lat1);
   const dLon = deg2rad(lon2 - lon1);
   const a =
@@ -83,14 +85,51 @@ function deg2rad(deg) {
 }
 
 function App() {
+  const [pandalsList, setPandalsList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
-  const [sortBy, setSortBy] = useState("default"); // 'default', 'waiting', 'distance'
+  const [sortBy, setSortBy] = useState("default");
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState("");
   const [loadingLocation, setLoadingLocation] = useState(false);
 
-  // ৩. ইউজারের জিপিএস লোকেশন নেওয়ার ফাংশন
+  // ৩. Firestore থেকে Real-Time Data ফেচ করা
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "pandals"), async (snapshot) => {
+      if (snapshot.empty) {
+        // ডাটাবেস খালি থাকলে প্রাথমিক ডাটা দিয়ে পপুলেট করা
+        for (const p of initialPandals) {
+          await setDoc(doc(db, "pandals", p.id), p);
+        }
+      } else {
+        const data = snapshot.docs.map((doc) => ({
+          ...doc.data(),
+          id: doc.id
+        }));
+        setPandalsList(data);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // ৪. ক্রাউড স্ট্যাটাস ও ওয়েটিং টাইম আপডেট করার ফাংশন
+  const handleUpdateCrowd = async (pandalId, newCrowd, newWaitingTime) => {
+    try {
+      const pandalRef = doc(db, "pandals", pandalId);
+      await updateDoc(pandalRef, {
+        crowd: newCrowd,
+        waitingTime: Number(newWaitingTime)
+      });
+    } catch (error) {
+      console.error("Error updating crowd status: ", error);
+      alert("Failed to update status. Please try again.");
+    }
+  };
+
+  // ৫. জিপিএস লোকেশন নেওয়া
   const handleGetLocation = () => {
     setLoadingLocation(true);
     if (navigator.geolocation) {
@@ -103,7 +142,7 @@ function App() {
           setLocationError("");
           setLoadingLocation(false);
         },
-        (error) => {
+        () => {
           setLocationError("Location permission denied or unavailable.");
           setLoadingLocation(false);
         }
@@ -114,10 +153,10 @@ function App() {
     }
   };
 
-  // ৪. প্রতিটি প্যান্ডেলের সাথে দূরত্ব হিসাব করা এবং সার্চ/ফিল্টার অ্যাপ্লাই করা
-  let results = pandals.map((p) => {
+  // ৬. ফিল্টারিং ও দূরত্ব হিসেব
+  let results = pandalsList.map((p) => {
     let distance = null;
-    if (userLocation) {
+    if (userLocation && p.lat && p.lng) {
       distance = calculateDistance(
         userLocation.lat,
         userLocation.lng,
@@ -137,7 +176,7 @@ function App() {
     return matchesSearch && matchesFilter;
   });
 
-  // ৫. সর্টিং হ্যান্ডেল করা (Waiting Time বা Distance অনুযায়ী)
+  // ৭. সর্টিং
   if (sortBy === "waiting") {
     results.sort((a, b) => a.waitingTime - b.waitingTime);
   } else if (sortBy === "distance" && userLocation) {
@@ -150,12 +189,12 @@ function App() {
         <p className="topline">KOLKATA · DURGA PUJA</p>
         <h1>🪔 PujoTracker</h1>
         <p>Find your next pandal with less waiting.</p>
-        <span className="demo-label">
-          DEMO DATA · NOT LIVE
+        <span className="demo-label" style={{ background: "#4caf50", color: "#fff" }}>
+          LIVE FIRESTORE DATA ENABLED
         </span>
       </header>
 
-      {/* নতুন লোকেশন বার (Location Bar) */}
+      {/* লোকেশন বার */}
       <div style={{ background: "#fff1d9", padding: "12px 20px", textAlign: "center", borderBottom: "1px solid #e4d8c8" }}>
         {userLocation ? (
           <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -183,7 +222,7 @@ function App() {
       <main>
         <h2>Explore Pandals</h2>
         <p className="subtitle">
-          Discover pandals, check sample crowd levels, and view distances.
+          Discover pandals, check real-time crowd levels, and view distances.
         </p>
 
         <input
@@ -205,7 +244,6 @@ function App() {
             <option value="High">High crowd</option>
           </select>
 
-          {/* সর্টিং ড্রপডাউন বা বাটন */}
           <select
             className="filter"
             value={sortBy}
@@ -219,60 +257,85 @@ function App() {
 
         <p className="count">{results.length} pandals found</p>
 
-        <div className="pandal-list">
-          {results.map((p) => (
-            <article className="card" key={p.id}>
-              <img
-                className="pandal-image"
-                src={p.image}
-                alt={p.name}
-                loading="lazy"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
+        {loading ? (
+          <p style={{ textAlign: "center", padding: "20px", fontWeight: "bold" }}>⚡ Loading live pandal data...</p>
+        ) : (
+          <div className="pandal-list">
+            {results.map((p) => (
+              <article className="card" key={p.id}>
+                <img
+                  className="pandal-image"
+                  src={p.image}
+                  alt={p.name}
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
 
-              <div className="card-content">
-                <div className="card-top">
-                  <div>
-                    <h3>{p.name}</h3>
-                    <p className="area">📍 {p.area}</p>
-                    {/* ইউজার লোকেশন অন থাকলে দূরত্ব (KM) দেখাবে */}
-                    {p.distance !== null && (
-                      <p style={{ fontSize: "12px", color: "#b94b24", fontWeight: "bold", margin: "4px 0 0" }}>
-                        🚗 ~{p.distance.toFixed(1)} km away from you
-                      </p>
-                    )}
+                <div className="card-content">
+                  <div className="card-top">
+                    <div>
+                      <h3>{p.name}</h3>
+                      <p className="area">📍 {p.area}</p>
+                      {p.distance !== null && (
+                        <p style={{ fontSize: "12px", color: "#b94b24", fontWeight: "bold", margin: "4px 0 0" }}>
+                          🚗 ~{p.distance.toFixed(1)} km away from you
+                        </p>
+                      )}
+                    </div>
+
+                    <span className={`badge ${p.crowd.toLowerCase()}`}>
+                      {p.crowd}
+                    </span>
                   </div>
 
-                  <span className={`badge ${p.crowd.toLowerCase()}`}>
-                    {p.crowd}
-                  </span>
+                  <div className="waiting">
+                    <span>Estimated waiting time</span>
+                    <strong>{p.waitingTime} minutes</strong>
+                  </div>
+
+                  {/* লাইভ আপডেট সেকশন (Update Crowd & Waiting Time) */}
+                  <div style={{ marginTop: "12px", padding: "10px", background: "#faf4ed", borderRadius: "8px", border: "1px solid #ebdccb" }}>
+                    <p style={{ margin: "0 0 6px", fontSize: "11px", fontWeight: "bold", color: "#84351c" }}>📢 Report Live Crowd Status:</p>
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      {["Low", "Medium", "High"].map((level) => (
+                        <button
+                          key={level}
+                          onClick={() => handleUpdateCrowd(p.id, level, level === "Low" ? 10 : level === "Medium" ? 25 : 60)}
+                          style={{
+                            padding: "4px 8px",
+                            fontSize: "11px",
+                            borderRadius: "4px",
+                            border: p.crowd === level ? "2px solid #7b301b" : "1px solid #ccc",
+                            background: p.crowd === level ? "#7b301b" : "#fff",
+                            color: p.crowd === level ? "#fff" : "#333",
+                            cursor: "pointer",
+                            fontWeight: "bold"
+                          }}
+                        >
+                          Set {level}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <a
+                    className="map-link"
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + " Kolkata")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ marginTop: "10px", display: "inline-block" }}
+                  >
+                    View on Google Maps ↗
+                  </a>
                 </div>
+              </article>
+            ))}
+          </div>
+        )}
 
-                <div className="waiting">
-                  <span>Estimated waiting time</span>
-                  <strong>{p.waitingTime} minutes</strong>
-                </div>
-
-                <a
-                  className="map-link"
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + " Kolkata")}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View on Google Maps ↗
-                </a>
-
-                <p className="note">
-                  Sample estimate · Not live data
-                </p>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        {results.length === 0 && (
+        {results.length === 0 && !loading && (
           <p className="empty">
             No pandals found. Try another search.
           </p>
