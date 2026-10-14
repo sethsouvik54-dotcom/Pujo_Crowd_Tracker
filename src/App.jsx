@@ -2,11 +2,6 @@ import { useState, useEffect } from "react";
 import "./index.css";
 import { db } from "./firebase";
 import { collection, onSnapshot, doc, updateDoc, setDoc } from "firebase/firestore";
-import { GoogleGenAI } from "@google/genai";
-
-// 1. Gemini AI Initialization
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 // 2. Pan-India Pandals & Festival Dataset
 const initialPandals = [
@@ -17,7 +12,19 @@ const initialPandals = [
   { id: "5", name: "Santosh Mitra Square", area: "Bowbazar, Kolkata", state: "West Bengal", festival: "Durga Puja", lat: 22.5697, lng: 88.3631, crowd: "High", waitingTime: 75, risk: "Red", image: "/images/santosh-mitra.jpg" },
   { id: "6", name: "Lalbaugcha Raja", area: "Lalbaug, Mumbai", state: "Maharashtra", festival: "Ganesh Chaturthi", lat: 18.9904, lng: 72.8385, crowd: "High", waitingTime: 120, risk: "Red", image: "https://images.unsplash.com/photo-1567157577867-05ccb1388e66?auto=format&fit=crop&w=600&q=80" },
   { id: "7", name: "Jagannath Temple", area: "Puri", state: "Odisha", festival: "Rath Yatra", lat: 19.8135, lng: 85.8312, crowd: "High", waitingTime: 90, risk: "Red", image: "https://images.unsplash.com/photo-1609766857041-ed402ea8069a?auto=format&fit=crop&w=600&q=80" },
-  { id: "8", name: "Thrikkakara Temple", area: "Kochi", state: "Kerala", festival: "Onam", lat: 10.0356, lng: 76.3292, crowd: "Low", waitingTime: 15, risk: "Green", image: "https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?auto=format&fit=crop&w=600&q=80" }
+  { id: "8", name: "Thrikkakara Temple", area: "Kochi", state: "Kerala", festival: "Onam", lat: 10.0356, lng: 76.3292, crowd: "Low", waitingTime: 15, risk: "Green", image: "https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?auto=format&fit=crop&w=600&q=80" },
+  { id: "9", name: "Bagbazar Sarbojanin", area: "Bagbazar, Kolkata", state: "West Bengal", festival: "Durga Puja", lat: 22.5951, lng: 88.3722, crowd: "High", waitingTime: 50, risk: "Red", image: "/images/bagbazar.jpg" },
+  { id: "10", name: "Mohammad Ali Park", area: "Central Kolkata", state: "West Bengal", festival: "Durga Puja", lat: 22.5641, lng: 88.3526, crowd: "High", waitingTime: 55, risk: "Red", image: "/images/mohammad-ali-park.jpg" },
+  { id: "11", name: "Kumartuli Park", area: "Kumartuli, Kolkata", state: "West Bengal", festival: "Durga Puja", lat: 22.5999, lng: 88.3622, crowd: "Medium", waitingTime: 30, risk: "Amber", image: "" },
+  { id: "12", name: "Deshapriya Park", area: "South Kolkata", state: "West Bengal", festival: "Durga Puja", lat: 22.5144, lng: 88.3511, crowd: "High", waitingTime: 65, risk: "Red", image: "" },
+  { id: "13", name: "Suruchi Sangha", area: "New Alipore, Kolkata", state: "West Bengal", festival: "Durga Puja", lat: 22.4964, lng: 88.3387, crowd: "Medium", waitingTime: 35, risk: "Amber", image: "" },
+  { id: "14", name: "Mudiali Club", area: "Kalighat, Kolkata", state: "West Bengal", festival: "Durga Puja", lat: 22.5161, lng: 88.3426, crowd: "Low", waitingTime: 15, risk: "Green", image: "" },
+  { id: "15", name: "Chetla Agrani Club", area: "Chetla, Kolkata", state: "West Bengal", festival: "Durga Puja", lat: 22.5117, lng: 88.3383, crowd: "Medium", waitingTime: 25, risk: "Amber", image: "" },
+  { id: "16", name: "Shiv Mandir Sarvajanik Ganeshotsav", area: "Pune", state: "Maharashtra", festival: "Ganesh Chaturthi", lat: 18.5074, lng: 73.8077, crowd: "Medium", waitingTime: 40, risk: "Amber", image: "" },
+  { id: "17", name: "Andhericha Raja", area: "Andheri, Mumbai", state: "Maharashtra", festival: "Ganesh Chaturthi", lat: 19.1136, lng: 72.8697, crowd: "High", waitingTime: 70, risk: "Red", image: "" },
+  { id: "18", name: "Meenakshi Amman Temple", area: "Madurai", state: "Tamil Nadu", festival: "Navaratri", lat: 9.9195, lng: 78.1193, crowd: "High", waitingTime: 80, risk: "Red", image: "" },
+  { id: "19", name: "Mysore Palace", area: "Mysuru", state: "Karnataka", festival: "Dussehra", lat: 12.3052, lng: 76.6551, crowd: "High", waitingTime: 90, risk: "Red", image: "" },
+  { id: "20", name: "Varanasi Ganga Aarti", area: "Dashashwamedh Ghat, Varanasi", state: "Uttar Pradesh", festival: "Diwali", lat: 25.3109, lng: 83.0107, crowd: "High", waitingTime: 60, risk: "Red", image: "" }
 ];
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -81,14 +88,16 @@ function App() {
     setIsAiThinking(true);
 
     try {
-      if (!ai) throw new Error("API Key Missing");
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `You are 'UtsavAI', a smart festival intelligence guide for India. Answer concisely about festivals, heritage, safety tips, and itineraries.\n\nUser Question: ${userText}`
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: userText })
       });
-      setChatHistory((prev) => [...prev, { sender: "ai", text: response.text }]);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI service unavailable");
+      setChatHistory((prev) => [...prev, { sender: "ai", text: data.text }]);
     } catch (err) {
-      setChatHistory((prev) => [...prev, { sender: "ai", text: "⚠️ Check VITE_GEMINI_API_KEY in your deployment environment." }]);
+      setChatHistory((prev) => [...prev, { sender: "ai", text: `⚠️ ${err.message}. Please try again later.` }]);
     } finally {
       setIsAiThinking(false);
     }
@@ -150,6 +159,11 @@ function App() {
                 <option value="All">All Festivals</option>
                 <option value="Durga Puja">Durga Puja</option>
                 <option value="Ganesh Chaturthi">Ganesh Chaturthi</option>
+                <option value="Navaratri">Navaratri</option>
+                <option value="Dussehra">Dussehra</option>
+                <option value="Diwali">Diwali</option>
+                <option value="Rath Yatra">Rath Yatra</option>
+                <option value="Onam">Onam</option>
               </select>
             </div>
 
