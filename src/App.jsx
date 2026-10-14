@@ -4,11 +4,11 @@ import { db } from "./firebase";
 import { collection, onSnapshot, doc, updateDoc, setDoc } from "firebase/firestore";
 import { GoogleGenAI } from "@google/genai";
 
-// ১. Gemini AI Initialization
+// 1. Gemini AI Initialization
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
-// ২. Pan-India Pandals & Festival Dataset
+// 2. Pan-India Pandals & Festival Dataset
 const initialPandals = [
   { id: "1", name: "Sreebhumi Sporting Club", area: "Lake Town, Kolkata", state: "West Bengal", festival: "Durga Puja", lat: 22.5958, lng: 88.4017, crowd: "High", waitingTime: 60, risk: "Red", image: "/images/sreebhumi.jpg" },
   { id: "2", name: "Ekdalia Evergreen Club", area: "Gariahat, Kolkata", state: "West Bengal", festival: "Durga Puja", lat: 22.5181, lng: 88.3639, crowd: "Medium", waitingTime: 25, risk: "Amber", image: "/images/ekdalia.jpg" },
@@ -37,7 +37,6 @@ function App() {
   const [search, setSearch] = useState("");
   const [selectedFestival, setSelectedFestival] = useState("All");
   const [filter, setFilter] = useState("All");
-  const [sortBy, setSortBy] = useState("default");
   const [userLocation, setUserLocation] = useState(null);
   const [routeSelected, setRouteSelected] = useState([]);
 
@@ -196,7 +195,7 @@ function App() {
             <div style={{ display: "grid", gap: "15px", marginTop: "20px" }}>
               {pandalsList.map(p => (
                 <div key={p.id} style={{ background: "#fff", padding: "15px", borderLeft: `6px solid ${p.crowd === "High" ? "#d32f2f" : p.crowd === "Medium" ? "#f57c00" : "#388e3c"}`, borderRadius: "8px", boxShadow: "0 2px 5px rgba(0,0,0,0.05)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-[#333]", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                       <h3 style={{ margin: 0 }}>{p.name}</h3>
                       <p style={{ margin: "2px 0", fontSize: "12px", color: "#666" }}>Current: {p.crowd} Crowd ({p.waitingTime} mins wait)</p>
@@ -265,4 +264,18 @@ function App() {
                 <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #eee" }}>
                   <span><strong>{p.name}</strong> ({p.area})</span>
                   <div style={{ display: "flex", gap: "5px" }}>
-                    <button onClick={() => handleUpdateCrowd(p.id, "Low", 10)} style={{ padding: "4px 8px", background: "#388e3c", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize
+                    <button onClick={() => handleUpdateCrowd(p.id, "Low", 10)} style={{ padding: "4px 8px", background: "#388e3c", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}>Set Normal (Green)</button>
+                    <button onClick={() => handleUpdateCrowd(p.id, "High", 60)} style={{ padding: "4px 8px", background: "#d32f2f", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "11px" }}>Set Emergency Alert (Red)</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </main>
+    </div>
+  );
+}
+
+export default App;
